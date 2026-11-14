@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- このページからの外部通信（fetch/XHR/WebSocket等）をブラウザ側で遮断する -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src blob: data:; connect-src 'none'; form-action 'none'; base-uri 'none'">
+<meta name="referrer" content="no-referrer">
+<title>TYPE-LAB | 結果画像がつくれる診断メーカー</title>
+<meta name="description" content="裏垢人格・推し活ガチ度・恋愛の重さ。6問で診断して、結果画像をそのままシェア。ログイン不要、回答は外部に送信されません。">
+<style>
+  :root {
+    --bg: #0a1120; --card-1: #15213b; --card-2: #0e1830; --field: #0b1424;
+    --line: rgba(148, 170, 214, 0.16); --text: #e8eefb; --muted: #8a97b4;
+    --blue-1: #3a7bd9; --blue-2: #5ea3f2; --green: #34d399;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hiragino Sans", "Noto Sans JP", sans-serif;
+    line-height: 1.6; min-height: 100vh;
+  }
+  header {
+    position: sticky; top: 0; z-index: 10;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 18px 20px; background: rgba(10, 17, 32, 0.92); backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line);
+  }
+  .logo { font-size: 17px; font-weight: 800; letter-spacing: 0.08em; white-space: nowrap; }
+  .logo span { color: var(--blue-2); }
+  .badge {
+    font-size: 11px; letter-spacing: 0.05em; white-space: nowrap; color: var(--green);
+    border: 1px solid rgba(52, 211, 153, 0.45); background: rgba(52, 211, 153, 0.06);
+    padding: 7px 12px; border-radius: 999px;
+  }
+  main { max-width: 480px; margin: 0 auto; padding: 20px 16px 40px; }
+
+  .card {
+    background: linear-gradient(160deg, var(--card-1), var(--card-2));
+    border: 1px solid var(--line); border-radius: 28px;
+    padding: 24px 22px; margin-bottom: 18px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  }
+  .card h2 { margin: 0 0 6px; font-size: 24px; font-weight: 700; }
+  .card .lead { margin: 0 0 16px; font-size: 13px; color: var(--muted); }
+
+  label.field-label { display: block; margin: 4px 0 8px; font-size: 16px; font-weight: 700; }
+  input[type=text] {
+    width: 100%; background: var(--field); color: var(--text);
+    border: 1px solid var(--line); border-radius: 18px; padding: 16px 18px; font-size: 16px; font-family: inherit;
+  }
+  input[type=text]:focus { outline: none; border-color: var(--blue-2); }
+  input[type=text]::placeholder { color: #5b6784; }
+  .hint { font-size: 12px; color: var(--muted); margin: 6px 2px 0; }
+
+  .themes { display: grid; gap: 12px; margin-top: 16px; }
+  .theme {
+    display: flex; align-items: center; gap: 14px; width: 100%; text-align: left; cursor: pointer;
+    background: var(--field); color: var(--text); font-family: inherit;
+    border: 1px solid var(--line); border-radius: 22px; padding: 16px 18px;
+    transition: border-color .2s, transform .1s;
+  }
+  .theme:hover { border-color: var(--blue-2); }
+  .theme:active { transform: scale(0.99); }
+  .theme .em { font-size: 34px; flex: none; }
+  .theme .tt { font-size: 17px; font-weight: 700; }
+  .theme .ss { font-size: 12.5px; color: var(--muted); }
+  .theme .go { margin-left: auto; color: var(--blue-2); font-weight: 700; flex: none; }
+
+  .btn {
+    display: inline-block; border: 0; cursor: pointer; text-decoration: none; text-align: center;
+    font-size: 16px; font-weight: 700; color: #fff; font-family: inherit;
+    padding: 16px 26px; border-radius: 16px;
+    background: linear-gradient(135deg, var(--blue-1), var(--blue-2));
+    box-shadow: 0 6px 18px rgba(58, 123, 217, 0.35); transition: transform .1s, filter .2s;
+  }
+  .btn:active { transform: scale(0.98); }
+  .btn:hover { filter: brightness(1.08); }
+  .btn.block { display: block; width: 100%; }
+  .btn.sub { background: var(--field); border: 1px solid var(--line); box-shadow: none; color: var(--text); margin-top: 12px; }
+
+  .view { display: none; }
+  .view.on { display: block; }
+
+  .prog { height: 8px; background: var(--field); border-radius: 999px; overflow: hidden; margin: 4px 0 18px; border: 1px solid var(--line); }
+  .prog i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--blue-1), var(--blue-2)); transition: width .25s; }
+  .qno { font-size: 13px; color: var(--blue-2); font-weight: 700; letter-spacing: .08em; }
+  .qtext { font-size: 21px; font-weight: 700; margin: 4px 0 18px; line-height: 1.5; }
+  .opt {
+    display: block; width: 100%; text-align: left; cursor: pointer; font-family: inherit;
+    background: var(--field); color: var(--text); font-size: 15.5px;
+    border: 1px solid var(--line); border-radius: 18px; padding: 16px 18px; margin-bottom: 10px;
+    transition: border-color .15s, background .15s;
+  }
+  .opt:hover, .opt:active { border-color: var(--blue-2); background: #0d1930; }
+  .back { background: none; border: 0; color: var(--muted); font-size: 14px; cursor: pointer; padding: 8px 0 0; font-family: inherit; }
+
+  #resultCanvas { width: 100%; height: auto; display: block; border-radius: 22px; border: 1px solid var(--line); margin-bottom: 16px; }
+  .note { font-size: 12.5px; color: var(--muted); margin: 14px 0 0; }
+
+  #adCard { display: none; padding: 16px 18px; }
+  #adCard .label { font-size: 11px; color: var(--muted); margin-bottom: 8px; }
+  #adCard a {
+    display: block; background: var(--field); border: 1px solid var(--line);
+    border-radius: 16px; padding: 14px 16px; color: var(--blue-2);
+    font-weight: 700; font-size: 14px; text-decoration: none;
+  }
+
+  #toast {
+    position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%) translateY(20px);
+    background: #1b2a4a; color: var(--text); border: 1px solid var(--line);
+    padding: 12px 18px; border-radius: 14px; font-size: 13.5px; opacity: 0; pointer-events: none;
+    transition: opacity .2s, transform .2s; max-width: 90%; text-align: center; z-index: 20;
+  }
+  #toast.on { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  footer { padding: 6px 8px 0; font-size: 12px; color: var(--muted); line-height: 1.7; }
+  footer h3 { margin: 14px 0 4px; font-size: 12px; color: #aab6d3; }
+  footer p { margin: 0; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">TYPE-<span>LAB</span></div>
+  <div class="badge">ログイン不要</div>
+</header>
+
+<main>
+
+  <!-- ホーム -->
+  <section class="view on" id="home">
+    <div class="card">
+      <h2>どの診断にする？</h2>
+      <p class="lead">6問・約30秒。結果は画像になって、そのままシェアできます。回答は外部に送信されず、保存もされません。</p>
+
+      <label class="field-label" for="nick">ニックネーム（任意）</label>
+      <input type="text" id="nick" maxlength="12" placeholder="結果画像に入る名前" autocomplete="off">
+      <p class="hint">本名でなくてOK。入力内容はこの端末の外に出ません。</p>
+
+      <div class="themes" id="themes"></div>
+    </div>
+  </section>
+
+  <!-- 質問 -->
+  <section class="view" id="quizView">
+    <div class="card">
+      <div class="qno" id="qno"></div>
+      <div class="prog"><i id="bar"></i></div>
+      <div class="qtext" id="qtext"></div>
+      <div id="opts"></div>
+      <button class="back" id="backBtn" type="button">← ひとつ前に戻る</button>
+    </div>
+  </section>
+
+  <!-- 結果 -->
+  <section class="view" id="resultView">
+    <div class="card">
+      <h2>診断結果</h2>
+      <p class="lead">画像を保存して、そのまま投稿できます。</p>
+      <canvas id="resultCanvas" width="1080" height="1350"></canvas>
+      <button class="btn block" id="saveBtn" type="button">⬇️ 結果画像を保存する</button>
+      <button class="btn block sub" id="shareBtn" type="button">𝕏 シェアする</button>
+      <button class="btn block sub" id="againBtn" type="button">別の診断をやる</button>
+      <p class="note">※ エンターテインメント目的の診断です。科学的・医学的な根拠はなく、性格や人間関係を断定するものではありません。</p>
+    </div>
+  </section>
+
+  <!-- 広告枠：下のAD_URLを設定すると表示されます -->
+  <section class="card" id="adCard">
+    <div class="label">PR</div>
+    <a id="adLink" href="#" target="_blank" rel="sponsored noopener noreferrer"></a>
+  </section>
+
+  <footer>
+    <h3>通信・ログについて</h3>
+    <p>回答内容・ニックネーム・結果画像は、すべて端末のブラウザ内で処理され、外部へ送信されません（ブラウザのCSPで外部通信を遮断しています）。アクセス解析・Cookie・広告計測タグは設置しておらず、回答を保存・記録する仕組みもありません。なお、本ページの配信に使うホスティング事業者のサーバーには、一般的なWebサイトと同様、ページ表示時のアクセス記録が残る場合があります。</p>
+    <h3>利用上の注意</h3>
+    <p>診断結果は娯楽としてお楽しみください。法令・公序良俗・他者の権利に反する目的での利用は禁止します。本ツールの利用により生じた損害について、運営者は責任を負いません。</p>
+    <div id="privacyAd" style="display:none">
+      <h3>外部送信に関する公表事項</h3>
+      <p>広告リンク（PR表記）をクリックした場合、成果計測のため、遷移先の広告事業者へIPアドレスやCookie等の識別子が送信されることがあります。回答内容が送信されることはありません。</p>
+    </div>
+    <p style="margin-top:14px"><button class="back" id="saveOfflineBtn" type="button" style="padding:0;text-decoration:underline">このページをオフライン版として保存</button></p>
+  </footer>
+
+</main>
+
+<div id="toast"></div>
+
+<script>
+  const PRISTINE = "<!DOCTYPE html>\n" + document.documentElement.outerHTML;
+
+  // ▼ 広告を出す場合はここにURLとリンク文言を入れる（空なら広告枠は表示されません）
+  const AD_URL  = "";
+  const AD_TEXT = "👀 こちらもチェック（PR） →";
+
+  const $ = (id) => document.getElementById(id);
+  const FONT = '"Hiragino Sans","Noto Sans JP","Yu Gothic","Meiryo",sans-serif';
+
+  if (AD_URL) {
+    $("adCard").style.display = "block";
+    $("privacyAd").style.display = "block";
+    $("adLink").href = AD_URL;
+    $("adLink").textContent = AD_TEXT;
+  }
+
+  /* ---------- 診断データ ---------- */
+  const QUIZZES = [
+    {
+      id: "u", emoji: "🌙", title: "裏垢人格診断", sub: "本当の自分、何タイプ？",
+      labels: ["本音ダダ漏れ度", "承認欲求", "ミステリアス度"],
+      questions: [
+        { q: "裏垢を作った一番の理由は？", o: ["夜中の感情を吐き出したい", "本垢で言えない毒を吐きたい", "本当の自分を見てほしい", "他人の投稿をこっそり見たい"] },
+        { q: "投稿する時間帯は？", o: ["深夜2時", "仕事・学校の合間", "反応が多そうな夜", "ほぼ投稿しない"] },
+        { q: "いいねが来た時は？", o: ["静かに噛みしめる", "「どうせbotだろ」と思う", "うれしくてすぐ保存", "通知は切ってある"] },
+        { q: "本垢にバレそうになったら？", o: ["即アカウントを消す", "鍵をかけて様子見", "動揺して意味不明な投稿", "そもそもバレる要素がない"] },
+        { q: "フォロワーとの距離感は？", o: ["言葉は少なめ、察してほしい", "つい論破しがち", "全員にリプ返したい", "フォローするだけ"] },
+        { q: "理想の裏垢のタイムラインは？", o: ["詩集みたいなTL", "切れ味抜群のTL", "毎日にぎやかなTL", "誰にも気づかれないTL"] }
+      ],
+      types: {
+        A: { n: "深夜ポエマー", e: "🌙", c: "夜だけ饒舌になる感情の詩人", h: 250, s: [85, 55, 70],
+             d: "静かな夜ほど言葉があふれるタイプ。短い一文に本音を詰め込むのが得意で、見る人の心にじわっと刺さります。" },
+        B: { n: "毒舌観察者", e: "🐍", c: "鋭すぎるツッコミ職人", h: 350, s: [90, 40, 60],
+             d: "世の中を一歩引いて見ているタイプ。的確すぎる一言で共感と拡散を呼ぶ一方、言い過ぎには要注意です。" },
+        C: { n: "愛されたがり", e: "🎀", c: "いいねで元気が出る甘えん坊", h: 320, s: [70, 95, 35],
+             d: "反応が何よりの栄養。リプや通知がモチベーションで、フォロワーとの距離がとても近い人気者タイプです。" },
+        D: { n: "ROM専の影", e: "👤", c: "全部知ってる、でも何も言わない", h: 200, s: [30, 20, 95],
+             d: "発信は少なくても情報収集力はピカイチ。静かに眺めるのが好きで、ミステリアスな存在感があります。" }
+      }
+    },
+    {
+      id: "o", emoji: "🔥", title: "推し活ガチ度診断", sub: "あなたの沼タイプは？",
+      labels: ["課金力", "情熱", "沼の深さ"],
+      questions: [
+        { q: "推しの新情報が出たら？", o: ["すぐ予定を空ける", "全体の流れを眺めて喜ぶ", "公式ストアへダッシュ", "発言を何度も読み返す"] },
+        { q: "理想の休日は？", o: ["ライブ遠征", "推しの話を友達とまったり", "戦利品の整理", "過去の映像を見返して研究"] },
+        { q: "お金の使い方は？", o: ["交通費と遠征費が最優先", "少額をコツコツ継続", "グッズが最優先", "本や資料に使う"] },
+        { q: "推しに関する噂が流れたら？", o: ["現地で支える気持ち", "見守りつつ冷静に", "公式グッズで応援", "事実関係を整理する"] },
+        { q: "他のファンとの関わり方は？", o: ["現場で仲良くなる", "平和にゆるく交流", "交換や取引で仲良くなる", "考察で語り合う"] },
+        { q: "推し活の目標は？", o: ["皆勤賞", "長く続けること", "全種コンプ", "誰より詳しくなる"] }
+      ],
+      types: {
+        A: { n: "全通ガチ勢", e: "🔥", c: "現場がある限り、そこにいる人", h: 15, s: [85, 98, 80],
+             d: "ライブもイベントも、行けるなら全部行くタイプ。熱量と行動力は仲間内でも別格で、現場の空気を一番知っています。" },
+        B: { n: "静かな箱推し", e: "🍀", c: "全員を、穏やかに愛せる人", h: 140, s: [50, 70, 60],
+             d: "特定の一人に偏らず、全体を温かく見守るタイプ。長く続けられるので、気づけば一番長いファンになっています。" },
+        C: { n: "グッズコレクター", e: "🛍️", c: "棚がもう小さな祭壇", h: 45, s: [95, 75, 70],
+             d: "形に残るものを集めるのが喜び。種類も状態もこだわり抜く、コレクション魂あふれるタイプです。" },
+        D: { n: "考察オタク", e: "🔍", c: "言葉の裏まで読み解く探究者", h: 215, s: [55, 80, 95],
+             d: "発言や演出の意味を深掘りするのが大好き。語り出すと止まらず、周りから頼られる解説役になりがちです。" }
+      }
+    },
+    {
+      id: "l", emoji: "💘", title: "恋愛の重さ診断", sub: "あなたの愛情スタイルは？",
+      labels: ["愛情の重さ", "連絡頻度", "気になる度"],
+      questions: [
+        { q: "好きな人から返信が遅いと？", o: ["3分後には不安になる", "「忙しいのかな」と待つ", "自分も少し遅らせる", "理由を100通り想像する"] },
+        { q: "初デートで大事にしたいのは？", o: ["気持ちを素直に伝える", "居心地のよさ", "ちょっとミステリアスな雰囲気", "相手の言動をよく観察"] },
+        { q: "相手の交友関係については？", o: ["全部把握したい", "信じて任せる", "気にしないふりをする", "情報を集めて分析する"] },
+        { q: "ケンカした時は？", o: ["すぐ会って話したい", "時間を置いて落ち着く", "自分からは折れない", "頭の中で反省会"] },
+        { q: "記念日は？", o: ["サプライズを全力で", "一緒にごはん", "何も言わず当日に動く", "事前に完璧な計画"] },
+        { q: "理想の関係は？", o: ["毎日連絡しあう", "自然体でいられる", "適度な距離感", "深く理解しあえる"] }
+      ],
+      types: {
+        A: { n: "全力ストレート型", e: "💘", c: "好きは言葉と行動で全部伝える", h: 340, s: [95, 90, 70],
+             d: "思い立ったらまっすぐ。気持ちを隠さない素直さが魅力で、相手にも愛情がしっかり伝わるタイプです。" },
+        B: { n: "安心感ほんわか型", e: "🌷", c: "一緒にいると落ち着く人", h: 130, s: [70, 50, 25],
+             d: "自然体で、相手を信じて待てるタイプ。無理をしない関係を築くのが上手で、長続きしやすいです。" },
+        C: { n: "ミステリアス型", e: "🕶️", c: "つかめない距離感が魅力", h: 270, s: [55, 35, 50],
+             d: "自分から踏み込みすぎず、適度な距離を保つタイプ。ミステリアスな雰囲気で、相手の興味を引きつけます。" },
+        D: { n: "こじらせ観察型", e: "🧩", c: "考えすぎるほど真剣な人", h: 190, s: [85, 45, 80],
+             d: "相手のことをよく見て、深く考えるタイプ。繊細で誠実な分、頭の中で一人会議が開かれがちです。" }
+      }
+    }
+  ];
+
+  /* ---------- 状態・画面切り替え ---------- */
+  const state = { quiz: null, idx: 0, answers: [], result: null };
+  const LETTERS = ["A", "B", "C", "D"];
+
+  function show(id) {
+    ["home", "quizView", "resultView"].forEach((v) => $(v).classList.toggle("on", v === id));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+  let toastTimer = null;
+  function toast(msg) {
+    const t = $("toast");
+    t.textContent = msg; t.classList.add("on");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove("on"), 2600);
+  }
+  function shuffle(a) {
+    const r = a.slice();
+    for (let i = r.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [r[i], r[j]] = [r[j], r[i]];
+    }
+    return r;
+  }
+
+  /* ---------- ホーム ---------- */
+  QUIZZES.forEach((qz) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "theme";
+    const em = document.createElement("span"); em.className = "em"; em.textContent = qz.emoji;
+    const box = document.createElement("span");
+    const tt = document.createElement("div"); tt.className = "tt"; tt.textContent = qz.title;
+    const ss = document.createElement("div"); ss.className = "ss"; ss.textContent = qz.sub + "（6問）";
+    box.append(tt, ss);
+    const go = document.createElement("span"); go.className = "go"; go.textContent = "▶";
+    b.append(em, box, go);
+    b.addEventListener("click", () => startQuiz(qz));
+    $("themes").appendChild(b);
+  });
+
+  /* ---------- 質問 ---------- */
+  function startQuiz(qz) {
+    state.quiz = qz; state.idx = 0; state.answers = [];
+    renderQ(); show("quizView");
+  }
+  function renderQ() {
+    const qz = state.quiz, q = qz.questions[state.idx], total = qz.questions.length;
+    $("qno").textContent = qz.title + "  Q" + (state.idx + 1) + " / " + total;
+    $("bar").style.width = (state.idx / total) * 100 + "%";
+    $("qtext").textContent = q.q;
+    const box = $("opts");
+    box.textContent = "";
+    shuffle(q.o.map((text, i) => ({ text, t: LETTERS[i] }))).forEach((o) => {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "opt"; b.textContent = o.text;
+      b.addEventListener("click", () => answer(o.t));
+      box.appendChild(b);
+    });
+    $("backBtn").style.visibility = state.idx === 0 ? "hidden" : "visible";
+  }
+  function answer(letter) {
+    state.answers[state.idx] = letter;
+    if (state.idx + 1 >= state.quiz.questions.length) { finish(); return; }
+    state.idx++; renderQ();
+  }
+  $("backBtn").addEventListener("click", () => {
+    if (state.idx === 0) { show("home"); return; }
+    state.idx--; renderQ();
+  });
+
+  /* ---------- 結果の計算 ---------- */
+  function finish() {
+    const qz = state.quiz, total = qz.questions.length;
+    const counts = { A: 0, B: 0, C: 0, D: 0 };
+    state.answers.forEach((a) => { counts[a]++; });
+    const order = LETTERS.slice().sort((a, b) => counts[b] - counts[a]);
+    const top = order[0], second = counts[order[1]] > 0 ? order[1] : null;
+    const type = qz.types[top];
+    const pct = Math.round(50 + 50 * counts[top] / total);
+    const stats = type.s.map((v) => Math.max(15, Math.min(99, v + (counts[top] - 3) * 3)));
+    const nick = $("nick").value.trim().slice(0, 12);
+    state.result = { qz, type, pct, sub: second ? qz.types[second] : null, stats, nick };
+    draw(state.result);
+    show("resultView");
+  }
+
+  /* ---------- 結果画像（Canvas） ---------- */
+  function rr(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+  function wrap(ctx, text, maxW) {
+    const lines = []; let cur = "";
+    for (const ch of text) {
+      if (ctx.measureText(cur + ch).width > maxW) { lines.push(cur); cur = ch; } else cur += ch;
+    }
+    if (cur) lines.push(cur);
+    return lines;
+  }
+  function draw(r) {
+    const c = $("resultCanvas"), ctx = c.getContext("2d"), W = 1080, H = 1350;
+    const { qz, type, pct, sub, stats, nick } = r;
+
+    const g = ctx.createLinearGradient(0, 0, W, H);
+    g.addColorStop(0, "hsl(" + type.h + ",65%,15%)");
+    g.addColorStop(1, "hsl(" + ((type.h + 45) % 360) + ",70%,34%)");
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+    ctx.globalAlpha = 0.1; ctx.fillStyle = "#fff";
+    [[930, 170, 250], [120, 1120, 300], [980, 900, 150]].forEach(([x, y, rad]) => {
+      ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+
+    ctx.textBaseline = "alphabetic";
+    ctx.textAlign = "left"; ctx.fillStyle = "rgba(255,255,255,0.85)";
+    ctx.font = "800 34px " + FONT; ctx.fillText("TYPE-LAB", 70, 100);
+    ctx.textAlign = "right"; ctx.font = "600 32px " + FONT; ctx.fillText(qz.title, W - 70, 100);
+
+    ctx.textAlign = "center"; ctx.fillStyle = "#fff";
+    ctx.font = "600 42px " + FONT;
+    ctx.fillText((nick ? nick + " さん" : "あなた") + "は…", W / 2, 200);
+
+    ctx.font = "190px " + FONT; ctx.fillText(type.e, W / 2, 410);
+
+    ctx.font = "800 92px " + FONT; ctx.fillStyle = "#fff";
+    ctx.fillText(type.n, W / 2, 545);
+
+    ctx.font = "600 38px " + FONT; ctx.fillStyle = "rgba(255,255,255,0.88)";
+    ctx.fillText(type.c, W / 2, 615);
+
+    // 一致度バッジ
+    const badge = "一致度 " + pct + "%" + (sub ? "　サブ：" + sub.n : "");
+    ctx.font = "700 34px " + FONT;
+    const bw = Math.min(ctx.measureText(badge).width + 70, W - 120);
+    rr(ctx, (W - bw) / 2, 650, bw, 66, 33);
+    ctx.fillStyle = "rgba(255,255,255,0.18)"; ctx.fill();
+    ctx.fillStyle = "#fff"; ctx.fillText(badge, W / 2, 696);
+
+    // 説明カード
+    rr(ctx, 60, 750, W - 120, 440, 40);
+    ctx.fillStyle = "rgba(10,17,32,0.55)"; ctx.fill();
+
+    ctx.textAlign = "left"; ctx.fillStyle = "#fff"; ctx.font = "500 35px " + FONT;
+    wrap(ctx, type.d, W - 240).slice(0, 4).forEach((ln, i) => ctx.fillText(ln, 100, 815 + i * 54));
+
+    const labels = qz.labels;
+    stats.forEach((v, i) => {
+      const y = 1030 + i * 54;
+      ctx.font = "600 30px " + FONT; ctx.fillStyle = "rgba(255,255,255,0.9)";
+      ctx.textAlign = "left"; ctx.fillText(labels[i], 100, y + 8);
+      rr(ctx, 430, y - 18, 440, 26, 13); ctx.fillStyle = "rgba(255,255,255,0.16)"; ctx.fill();
+      rr(ctx, 430, y - 18, Math.max(26, 440 * v / 100), 26, 13);
+      ctx.fillStyle = "hsl(" + type.h + ",95%,72%)"; ctx.fill();
+      ctx.textAlign = "right"; ctx.fillStyle = "#fff"; ctx.font = "700 30px " + FONT;
+      ctx.fillText(v + "", W - 100, y + 8);
+    });
+
+    ctx.textAlign = "center"; ctx.fillStyle = "rgba(255,255,255,0.7)"; ctx.font = "500 28px " + FONT;
+    ctx.fillText("TYPE-LAB" + (location.host ? "  " + location.host : "") + "　※エンタメ診断です", W / 2, 1290);
+  }
+
+  /* ---------- 保存・共有 ---------- */
+  function canvasBlob() {
+    return new Promise((res) => $("resultCanvas").toBlob(res, "image/png"));
+  }
+  $("saveBtn").addEventListener("click", async () => {
+    const blob = await canvasBlob();
+    if (!blob) { toast("画像の作成に失敗しました"); return; }
+    const u = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = u; a.download = "typelab_" + state.result.qz.id + "_" + Date.now() + ".png";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(u), 1500);
+    toast("画像を保存しました");
+  });
+  $("shareBtn").addEventListener("click", async () => {
+    const r = state.result;
+    const text = (r.nick ? r.nick + "さん" : "私") + "は「" + r.type.n + "」でした" + r.type.e +
+                 "\n" + r.qz.title + " #診断 #TYPELAB";
+    try {
+      const blob = await canvasBlob();
+      const file = new File([blob], "typelab.png", { type: "image/png" });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], text });
+        return;
+      }
+    } catch (e) {
+      if (e && e.name === "AbortError") return;
+    }
+    const url = "https://twitter.com/intent/tweet?text=" + encodeURIComponent(text) +
+                (location.protocol.startsWith("http") ? "&url=" + encodeURIComponent(location.href) : "");
+    window.open(url, "_blank", "noopener");
+    toast("画像は先に保存してから、投稿に添付してね");
+  });
+  $("againBtn").addEventListener("click", () => show("home"));
+
+  $("saveOfflineBtn").addEventListener("click", () => {
+    const blob = new Blob([PRISTINE], { type: "text/html" });
+    const u = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = u; a.download = "type-lab.html";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(u), 1000);
+  });
+</script>
+</body>
+</html>
